@@ -6,7 +6,7 @@
 :root{--ink:#22303a;--navy:#14384a;--line:#d5dde3;--bg:#f3f5f7}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Arial,Helvetica,sans-serif}
-.card{max-width:600px;margin:24px auto;background:#fff;border:1px solid var(--line);border-radius:8px;padding:22px 22px 18px}
+.card{max-width:600px;margin:24px auto;transition:max-width .2s;background:#fff;border:1px solid var(--line);border-radius:8px;padding:22px 22px 18px}
 @media (max-width:600px){.card{margin:12px 12px;padding:18px 16px}}
 .hd{border-bottom:1.5px solid #1f4e66;padding-bottom:10px;margin-bottom:16px}
 .hd b{display:block;font-size:18px;color:var(--navy)}.hd span{font-size:12px;color:#4b5963}
@@ -27,6 +27,15 @@ h1{font-size:15px;letter-spacing:.12em;text-align:center;color:var(--navy);margi
 a.ch{text-decoration:none}
 .hint{font-size:12.5px;color:#6a737b;margin:2px 0 0}
 .ft{font-size:12px;color:#6a737b;text-align:center;margin-top:18px}
+/* Arborescence : les 3 choix apparaissent à droite de « Ma mutuelle ne veut pas me rembourser », reliés par des connecteurs */
+.card.wide{max-width:1000px}
+.tree{position:relative}
+.tree.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);column-gap:64px;align-items:end}
+.col2 .ch{margin:8px 0}
+#cx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+@media (max-width:760px){.tree.split{display:block}.col2{padding-left:30px;margin-top:4px}}
+.dl{display:inline-block;margin:10px 8px 0 0;padding:9px 14px;border-radius:6px;border:1.5px solid #1f4e66;background:#fff;color:#14384a;font:700 14px Arial,sans-serif;cursor:pointer}
+.dl[disabled]{opacity:.6;cursor:default}
 [hidden]{display:none!important}
 </style></head>
 <body>
@@ -35,20 +44,29 @@ a.ch{text-decoration:none}
   <h1>Remboursement du dépassement d'honoraires</h1>
   <div class="pat" id="pat" hidden></div>
   <p class="q">Où en est le remboursement par votre mutuelle ?</p>
-  <button class="ch g" data-r="ok">Ma mutuelle m'a remboursé</button>
-  <button class="ch o" data-r="att">Je n'ai pas encore envoyé ma facture acquittée à ma mutuelle</button>
-  <button class="ch r" data-r="ko">Ma mutuelle ne veut pas me rembourser ou me demande des documents complémentaires</button>
+  <div class="tree" id="tree">
+   <div class="col1">
+    <button class="ch g" data-r="ok">Ma mutuelle m'a remboursé</button>
+    <button class="ch o" data-r="att">Je n'ai pas encore envoyé ma facture acquittée à ma mutuelle</button>
+    <button class="ch r" data-r="ko" id="b-ko">Ma mutuelle ne veut pas me rembourser ou me demande des documents complémentaires</button>
+   </div>
+   <div class="col2" id="br" hidden>
+    <a class="ch b" id="mail-mut" href="#">Je souhaite un mail pré-rempli pour expliquer ma situation à ma mutuelle</a>
+    <a class="ch r" id="mail-cab" href="#"></a>
+    <a class="ch o" id="mail-att" href="#">Je veux une attestation de dépassement d'honoraires</a>
+   </div>
+   <svg id="cx" aria-hidden="true"></svg>
+  </div>
 
   <div class="msg ok" id="m-ok" hidden>Parfait !</div>
   <div class="msg info" id="m-att" hidden>Transmettez à votre mutuelle la <b>facture acquittée</b> du Dr Derkenne, justificatif du dépassement d'honoraires.
-    <div id="att-etat" style="margin-top:8px">Elle est jointe au mail que vous avez reçu.</div></div>
+    <div id="att-etat" style="margin-top:8px">Elle est jointe au mail que vous avez reçu.</div>
+    <button class="dl" data-dl="1" hidden>Télécharger ma facture acquittée (PDF)</button><button class="dl" data-dl="att" hidden></button></div>
   <div id="m-ko" hidden>
     <div class="msg info" id="ko-SJ" hidden>Afin de faciliter la prise en charge de votre facture par votre mutuelle, il faut transmettre à votre mutuelle la <b>facture acquittée du Dr Derkenne</b> et une <b>attestation de frais engagés</b> que peut vous fournir l'hôpital Saint-Joseph. Vous pouvez joindre la hotline facturation de l'hôpital au <a href="tel:+33491807171">04 91 80 71 71</a>.</div>
     <div class="msg info" id="ko-BO" hidden>Afin de faciliter la prise en charge de votre facture par votre mutuelle, le secrétariat de l'ambulatoire de la clinique Bonneveine a dû vous fournir une <b>attestation des dépassements d'honoraires</b>. Il faut transmettre la <b>facture acquittée</b> et l'<b>attestation de dépassement d'honoraires</b> à votre mutuelle.</div>
-    <a class="ch b" id="mail-mut" href="#">Je souhaite un mail pré-rempli pour expliquer ma situation à ma mutuelle</a>
     <div class="msg info" id="mut-etat" hidden></div>
-    <a class="ch r" id="mail-cab" href="#"></a>
-    <a class="ch o" id="mail-att" href="#">Je veux une attestation de dépassement d'honoraires</a>
+    <button class="dl" data-dl="1" hidden>Télécharger ma facture acquittée (PDF)</button><button class="dl" data-dl="att" hidden></button>
     <p class="hint">Ces boutons ouvrent un message déjà rempli dans votre messagerie : il vous suffit de le relire et de l'envoyer.</p>
   </div>
   <div class="ft">Vous pouvez fermer cette page.</div>
@@ -95,7 +113,7 @@ a.ch{text-decoration:none}
 
   /* Relais du Dr Derkenne : enregistre la réponse (jeton seulement, aucune donnée personnelle) et renvoie la facture si besoin */
   var T = g("t"), U = g("u"), relais = /^[A-Za-z0-9]{24,64}$/.test(T) && /^https:\/\/script\.google(usercontent)?\.com\//.test(U);
-  var dejaNote = {};
+  var dejaNote = {}, ATTEST = false;
   function noter(r, fin){
     if (!relais){ if (fin) fin(null); return; }
     var key = "mut:" + T + ":" + r;
@@ -125,18 +143,58 @@ a.ch{text-decoration:none}
   document.getElementById("mail-mut").addEventListener("click", function(){
     var et = document.getElementById("mut-etat"), pj = L === "BO" ? "l'attestation de dépassement d'honoraires de la clinique" : "l'attestation de frais engagés de l'hôpital";
     et.hidden = false;
-    et.innerHTML = "Le message s'ouvre dans votre messagerie : <b>ajoutez l'adresse mail de votre mutuelle</b>, joignez la facture acquittée (jointe au mail du Dr Derkenne) et " + pj + ", puis envoyez.";
+    et.innerHTML = "Le message s'ouvre dans votre messagerie : <b>ajoutez l'adresse mail de votre mutuelle</b>, joignez la facture acquittée (" + (relais ? "bouton « Télécharger ma facture acquittée » ci-dessous" : "jointe au mail du Dr Derkenne") + ") et " + pj + (ATTEST ? " (bouton de téléchargement ci-dessous)" : "") + ", puis envoyez.";
     noter("lettre", function(res){
-      if (res && (res.envoye || res.dejaEnvoye || res.dejaNote)) et.innerHTML = "Le message s'ouvre dans votre messagerie : ajoutez l'adresse mail de votre mutuelle et vos pièces jointes, puis envoyez.<br><br><b>Plus simple : nous venons de vous envoyer ce même message par mail, avec la facture acquittée déjà jointe.</b> Ouvrez-le, cliquez « Transférer », ajoutez l'adresse de votre mutuelle et " + pj + ", puis envoyez.";
+      if (res && (res.envoye || res.dejaEnvoye || res.dejaNote)) et.innerHTML = "Le message s'ouvre dans votre messagerie : ajoutez l'adresse mail de votre mutuelle, joignez la facture acquittée (bouton « Télécharger ma facture acquittée » ci-dessous) et " + pj + (ATTEST ? " (bouton de téléchargement ci-dessous)" : "") + ", puis envoyez.<br><br><b>Plus simple : nous venons de vous envoyer ce même message par mail, avec la facture acquittée" + (ATTEST ? " et l'attestation" : "") + " déjà jointe" + (ATTEST ? "s" : "") + ".</b> Ouvrez-le, cliquez « Transférer », ajoutez l'adresse de votre mutuelle" + (ATTEST ? "" : " et " + pj) + ", puis envoyez.";
     });
   });
   document.getElementById("mail-att").addEventListener("click", function(){ noter("koatt"); });
   var btns = document.querySelectorAll("button.ch");
+  /* Connecteurs entre « Ma mutuelle ne veut pas me rembourser » et les 3 choix */
+  var tree = document.getElementById("tree"), br = document.getElementById("br"), cx = document.getElementById("cx"), bko = document.getElementById("b-ko");
+  function relier(){
+    if (br.hidden){ cx.innerHTML = ""; return; }
+    var T0 = tree.getBoundingClientRect(), k = bko.getBoundingClientRect(), cote = getComputedStyle(tree).display === "grid";
+    var sx = cote ? k.right - T0.left : k.left - T0.left + 16, sy = cote ? k.top + k.height / 2 - T0.top : k.bottom - T0.top, out = "";
+    var links = br.querySelectorAll(".ch");
+    for (var i = 0; i < links.length; i++){
+      var b = links[i].getBoundingClientRect(), ex = b.left - T0.left, ey = b.top + b.height / 2 - T0.top, col = getComputedStyle(links[i]).borderColor;
+      var d = cote ? "M" + sx + " " + sy + " C" + (sx + 32) + " " + sy + " " + (ex - 32) + " " + ey + " " + ex + " " + ey : "M" + sx + " " + sy + " V" + ey + " H" + ex;
+      out += '<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="2.5" stroke-linecap="round"/><circle cx="' + ex + '" cy="' + ey + '" r="4" fill="' + col + '"/>';
+    }
+    cx.innerHTML = out + '<circle cx="' + sx + '" cy="' + sy + '" r="4.5" fill="#a31f1f"/>';
+  }
+  window.addEventListener("resize", relier);
+  /* Facture acquittée : téléchargée depuis le relais (avec le jeton) */
+  var dls = document.querySelectorAll("button.dl");
+  var attBtnLib = L === "BO" ? "Télécharger l'attestation de dépassement d'honoraires (PDF)" : "Télécharger l'attestation de frais engagés (PDF)";
+  for (var j = 0; j < dls.length; j++){ var isAtt = dls[j].getAttribute("data-dl") === "att"; dls[j].hidden = !relais || isAtt; if (isAtt) dls[j].textContent = attBtnLib; dls[j].onclick = function(){ telecharger(this); }; }
+  /* L'attestation de l'établissement a-t-elle été déposée par le cabinet ? */
+  if (relais){ var cbi = "mutinfo" + Math.floor(Math.random() * 1e9), si = document.createElement("script");
+    window[cbi] = function(res){ try { delete window[cbi]; } catch (e) {} si.remove(); if (res && res.ok && res.attest){ ATTEST = true; for (var k = 0; k < dls.length; k++) if (dls[k].getAttribute("data-dl") === "att") dls[k].hidden = false; } };
+    si.src = U + (U.indexOf("?") < 0 ? "?" : "&") + "a=mutinfo&t=" + encodeURIComponent(T) + "&cb=" + cbi; document.body.appendChild(si); }
+  function telecharger(btn){
+    var lib = btn.textContent; btn.disabled = true; btn.textContent = "Téléchargement…";
+    var cb = "mutpdf" + Math.floor(Math.random() * 1e9), s = document.createElement("script"), fini = false;
+    var stop = function(res){
+      if (fini) return; fini = true; try { delete window[cb]; } catch (e) { window[cb] = undefined; } s.remove(); btn.disabled = false; btn.textContent = lib;
+      if (!res || !res.ok || !res.data){ alerte(btn, btn.getAttribute("data-dl") === "att" ? "Téléchargement de l'attestation impossible pour le moment." : res && res.error === "lien expiré" ? "Ce lien a expiré : la facture est jointe au mail que vous avez reçu." : "Téléchargement impossible pour le moment : la facture est jointe au mail que vous avez reçu."); return; }
+      var bin = atob(res.data), a8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) a8[i] = bin.charCodeAt(i);
+      var url = URL.createObjectURL(new Blob([a8], { type: "application/pdf" })), a = document.createElement("a");
+      a.href = url; a.download = res.name || "Facture_acquittee.pdf"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+    };
+    window[cb] = stop; s.onerror = function(){ stop(null); }; setTimeout(function(){ stop(null); }, 30000);
+    s.src = U + (U.indexOf("?") < 0 ? "?" : "&") + "a=mutpdf&t=" + encodeURIComponent(T) + (btn.getAttribute("data-dl") === "att" ? "&f=att" : "") + "&cb=" + cb;
+    document.body.appendChild(s);
+  }
+  function alerte(btn, txt){ var m = document.createElement("div"); m.className = "hint"; m.textContent = txt; btn.insertAdjacentElement("afterend", m); setTimeout(function(){ m.remove(); }, 9000); }
   function show(r){
     for (var i = 0; i < btns.length; i++){ var on = btns[i].getAttribute("data-r") === r; btns[i].classList.toggle("on", on); btns[i].classList.toggle("dim", !!r && !on); }
     document.getElementById("m-ok").hidden = r !== "ok";
     document.getElementById("m-att").hidden = r !== "att";
     document.getElementById("m-ko").hidden = r !== "ko";
+    br.hidden = r !== "ko"; tree.classList.toggle("split", r === "ko"); document.querySelector(".card").classList.toggle("wide", r === "ko");
+    setTimeout(relier, 0); setTimeout(relier, 260);
   }
   for (var i = 0; i < btns.length; i++) btns[i].onclick = function(){ choisir(this.getAttribute("data-r")); };
   choisir(["ok", "att", "ko"].indexOf(g("r")) >= 0 ? g("r") : "");
