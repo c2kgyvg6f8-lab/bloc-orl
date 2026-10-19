@@ -145,25 +145,23 @@ a.ch{text-decoration:none}
     ancien: "Le service du cabinet n'est pas encore à jour : réessayez plus tard, ou contactez le secrétariat du Dr Derkenne au 04.91.63.65.25.",
     reseau: "Le service du cabinet est injoignable pour le moment (connexion internet ?). Réessayez dans quelques minutes.",
     delai: "Le service du cabinet ne répond pas pour le moment. Réessayez dans quelques minutes.",
+    erreur: "Le service du cabinet a rencontré une erreur. Réessayez plus tard, ou contactez le secrétariat du Dr Derkenne au 04.91.63.65.25.",
     "lien expiré": "Ce lien n'est pas (ou plus) actif sur le service du cabinet : la facture acquittée est jointe au mail que vous avez reçu du Dr Derkenne.",
     "facture absente": "La facture n'est pas disponible sur ce lien : elle est jointe au mail que vous avez reçu du Dr Derkenne.",
     "attestation absente": "L'attestation n'a pas encore été déposée par le cabinet."
   };
   var errTxt = function(e){ return ERR[e] || ERR.delai; };
-  /* Appel JSONP : distingue un service pas à jour (le script se charge mais ne répond pas), injoignable ou trop lent */
+  /* Appel du relais (lecture directe de la réponse JSON) : distingue un relais pas à jour, en erreur ou injoignable */
   function appel(params, ms){
-    return new Promise(function(resolve, reject){
-      if (!relais) { reject("sansrelais"); return; }
-      var cb = "blocorl" + Math.floor(Math.random() * 1e9), s = document.createElement("script"), fini = false;
-      var stop = function(err, res){ if (fini) return; fini = true; try { delete window[cb]; } catch (e) { window[cb] = undefined; } s.remove(); if (err) reject(err); else resolve(res); };
-      window[cb] = function(res){ stop(null, res); };
-      s.onerror = function(){ stop("reseau"); };
-      s.onload = function(){ setTimeout(function(){ stop("ancien"); }, 400); };
-      setTimeout(function(){ stop("delai"); }, ms || 30000);
-      var q = []; for (var k in params) q.push(k + "=" + encodeURIComponent(params[k]));
-      s.src = U + (U.indexOf("?") < 0 ? "?" : "&") + q.join("&") + "&cb=" + cb;
-      document.body.appendChild(s);
-    });
+    if (!relais) return Promise.reject("sansrelais");
+    var q = []; for (var k in params) q.push(k + "=" + encodeURIComponent(params[k]));
+    var url = U + (U.indexOf("?") < 0 ? "?" : "&") + q.join("&");
+    var delai = new Promise(function(res, rej){ setTimeout(function(){ rej("delai"); }, ms || 30000); });
+    var req = fetch(url, { method: "GET", redirect: "follow", credentials: "omit" }).then(function(r){ return r.text(); }, function(){ throw "reseau"; })
+      .then(function(t){ var res; try { res = JSON.parse(t); } catch (e) { throw "erreur"; }
+        if (res && res.service && res.ok && !("attest" in res) && !("data" in res) && !("envoye" in res)) throw "ancien";
+        return res; });
+    return Promise.race([req, delai]);
   }
   function diag(txt){ $("diag").textContent = txt || ""; $("diag").hidden = !txt; }
   var dejaNote = {};
