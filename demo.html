@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bloc ORL – démonstration</title>
+<meta name="robots" content="noindex">
+<style>
+  html,body{margin:0;background:#f6f7f9;color:#1d2433;font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color-scheme:light}
+  #ld{min-height:100vh;display:grid;place-items:center;padding:16px;box-sizing:border-box}
+  #ld .box{max-width:420px;text-align:center}
+  #ld h1{font-size:20px;margin:0 0 6px}
+  #ld p{margin:4px 0;color:#5b6475}
+  #ld .bar{height:6px;background:#e3e7ee;border-radius:3px;overflow:hidden;margin:14px 0 8px}
+  #ld .bar i{display:block;height:100%;width:8%;background:#2f6fde;transition:width .2s}
+  #ld .err{color:#b42318;white-space:pre-wrap}
+</style></head>
+<body>
+<div id="ld"><div class="box">
+  <h1>Bloc ORL · démonstration</h1>
+  <p>Version fictive : patients et chirurgien imaginaires, aucun mail envoyé.</p>
+  <div class="bar"><i id="ldbar"></i></div>
+  <p id="ldmsg">Chargement de la dernière version…</p>
+</div></div>
+<script>
+/* =====================================================================
+   Bloc ORL – version de démonstration (demo.html)
+   ---------------------------------------------------------------------
+   Ce fichier ne contient PAS le logiciel : à chaque ouverture il charge
+   index.html (la version de référence, toujours la dernière publiée) et
+   l'ouvre en « mode démo ». La démo suit donc automatiquement chaque
+   nouvelle version de Bloc ORL, sans rien refaire.
+   Mode démo :
+   - données séparées (base « bloc-orl-demo » de ce navigateur), jamais
+     celles du cabinet ; Google Drive désactivé ;
+   - patients, intervenants et chirurgien fictifs (nom, adresse, n° AM,
+     téléphones, signature et cachet remplacés) ;
+   - aucun mail ne part : le relais Gmail est simulé (les mails sont
+     listés dans le bandeau « Démo »), messagerie et Gmail ne s'ouvrent pas.
+   Tout le code est dans une fonction (aucune variable globale), pour ne
+   pas gêner le logiciel une fois chargé dans cette même page.
+   ===================================================================== */
+(() => {
+  "use strict";
+  const DEMO = {
+    db: "bloc-orl-demo",                 // base IndexedDB de la démo (le logiciel utilise « bloc-orl »)
+    gen: 1,                              // version du jeu de données fictif (le changer régénère les données)
+    relais: "https://script.google.com/macros/s/DEMO-RELAIS-SIMULE/exec",
+    code: "0000",                        // code du profil Docteur dans la démo
+    dr: { nom: "Docteur Paul MARTIN", court: "Dr Martin" },
+  };
+  const $msg = document.getElementById("ldmsg"), $bar = document.getElementById("ldbar");
+  const say = (t, pc) => { $msg.textContent = t; if (pc != null) $bar.style.width = Math.max(8, Math.min(100, pc)) + "%"; };
+  const fail = e => { console.error(e); $msg.className = "err"; $msg.textContent = "La démonstration n'a pas pu s'ouvrir : " + (e && e.message || e) + "\nRechargez la page."; };
+
+  /* ---------- 1. Identité fictive : textes ---------- */
+  const SEC_KEEP = /^(bloc_cp|blocsec|secretambu|ambulatoire|anesthesie|secretariat\.bloc|preadmission|pec)$/i;
+  const TEXT_RULES = [
+    [/<title>([^<]*)<\/title>/, (m, t) => `<title>${t.replace(/–.*$/, "").trim()} – démo</title>`],
+    [/Renaud DERKENNE/g, "Paul MARTIN"], [/DERKENNE Renaud/g, "MARTIN Paul"], [/DERKENNE RENAUD/g, "MARTIN PAUL"],
+    [/Renaud Derkenne/g, "Paul Martin"], [/renaud\.derkenne@[\w.-]+/gi, "cabinet.demo@exemple.fr"],
+    [/docteurderkenne@gmail\.com/gi, "cabinet.demo@exemple.fr"], [/medigibbes14@orange\.fr/gi, "secretariat@cabinet-demo.fr"],
+    [/Derkenne Renaud/g, "Martin Paul"], [/DERKENNE/g, "MARTIN"], [/Derkenne/g, "Martin"], [/derkenne/g, "martin"], [/signature renaud/gi, "signature"], [/\bRenaud\b/g, "Paul"],
+    [/143 chemin de Gibbes/g, "10 avenue des Tilleuls"], [/13014 Marseille/g, "13001 Marseille"], [/Gibbes 14e/g, "Cabinet"], [/Gibbes/g, "Exemple"],
+    [/13(?:\s|&nbsp;)+10?(?:\s|&nbsp;)+0?7334(?:\s|&nbsp;)+8/g, "00 0 00000 0"],
+    [/04([ .]?)91\1?63\1?65\1?25/g, (m, s) => ["04", "00", "00", "00", "01"].join(s)],
+    [/06([ .]?)65\1?00\1?69\1?24/g, (m, s) => ["06", "00", "00", "00", "02"].join(s)],
+    [/04([ .]?)91\1?67\1?20\1?15/g, (m, s) => ["04", "00", "00", "00", "03"].join(s)],
+    /* adresses des établissements : domaine fictif, boîtes nominatives remplacées par « secretariat » */
+    [/([\w.+-]+)@(hopital-saint-joseph\.fr|clinique-de-bonneveine\.fr)/gi,
+      (m, u, d) => `${SEC_KEEP.test(u) ? u : "secretariat"}@${/joseph/i.test(d) ? "hopital-exemple.fr" : "clinique-exemple.fr"}`],
+  ];
+  const anonText = t => TEXT_RULES.reduce((s, [re, by]) => s.replace(re, by), t);
+
+  /* ---------- 2. Identité fictive : signature et cachet (images) ---------- */
+  /* empreintes (SHA-256, 16 caractères) des images du cachet et de la signature du praticien réel */
+  const KNOWN_IMG = new Set(["caf78a894974d59b", "4f3a279b6c510655", "fdbe9a96a8c17d62", "440be29bcd53cc48",
+    "7ed53aef315ab5a3", "e91505b0c14b7108", "0f3b277e02240af3", "f7f334d85af32bfa"]);
+  const sha16 = async s => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].slice(0, 8).map(b => b.toString(16).padStart(2, "0")).join("");
+  const loadImg = src => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("image")); i.src = src; });
+  function drawSig(x, X, Y, W, H){
+    x.save(); x.strokeStyle = "#1b2b6b"; x.fillStyle = "#1b2b6b"; x.lineWidth = Math.max(1.5, H * 0.025); x.lineCap = "round";
+    const f = Math.round(H * 0.42);
+    x.font = `italic ${f}px "Snell Roundhand","Segoe Script","Brush Script MT","Apple Chancery",cursive`;
+    x.textBaseline = "middle"; x.fillText("P. Martin", X + W * 0.08, Y + H * 0.45, W * 0.84);
+    x.beginPath(); x.moveTo(X + W * 0.06, Y + H * 0.75); x.bezierCurveTo(X + W * 0.35, Y + H * 0.6, X + W * 0.6, Y + H * 0.9, X + W * 0.94, Y + H * 0.68); x.stroke();
+    x.restore();
+  }
+  function drawCachet(x, X, Y, W, H){
+    const L = ["Docteur MARTIN Paul (fictif)", "Chirurgien ORL — démonstration", "10 avenue des Tilleuls", "13001 Marseille   04.00.00.00.01", "N° AM 00 0 00000 0"];
+    const f = Math.max(8, Math.min(H / (L.length * 1.35), W / 19));
+    x.save(); x.fillStyle = "#111"; x.textBaseline = "top"; x.font = `${f}px Arial,Helvetica,sans-serif`;
+    L.forEach((l, i) => { x.font = `${i === 0 ? "bold " : ""}${f}px Arial,Helvetica,sans-serif`; x.fillText(l, X + f * 0.6, Y + f * 0.4 + i * f * 1.3, W - f * 1.2); });
+    x.restore();
+  }
+  async function fakeImage(mime, payload){
+    let w = 300, h = 120;
+    try { const im = await loadImg(`data:image/${mime};base64,${payload}`); w = im.naturalWidth || w; h = im.naturalHeight || h; } catch (e){}
+    const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d"), r = w / h, jpg = /jp/.test(mime);
+    if (jpg){ x.fillStyle = "#fff"; x.fillRect(0, 0, w, h); }
+    if (r > 3.6){ drawSig(x, 0, h * 0.15, w * 0.32, h * 0.8); drawCachet(x, w * 0.42, 0, w * 0.58, h); }
+    else if (r > 1.9) drawCachet(x, 0, 0, w, h);
+    else drawSig(x, 0, 0, w, h);
+    return c.toDataURL(jpg ? "image/jpeg" : "image/png", 0.92).split(",")[1];
+  }
+  async function anonImages(text){
+    const re = /data:image\/(png|jpe?g);base64,((?:[A-Za-z0-9+=]|\\?\/)+)/g, seen = new Map();
+    let m;
+    while ((m = re.exec(text))){
+      const raw = m[2]; if (raw.length < 300 || seen.has(raw)) continue;
+      const before = text.slice(Math.max(0, m.index - 300), m.index);
+      const ctx = /alt=\\?"[^"\\]*signature/i.test(before.slice(-220)) || /\b(?:sig|signature|cachet|tampon)\\?["']?\s*:\s*\\?["']$/i.test(before);
+      seen.set(raw, { mime: m[1], ctx });
+    }
+    for (const [raw, info] of seen){
+      const p = raw.replace(/\\\//g, "/");
+      if (!info.ctx && !KNOWN_IMG.has(await sha16(p))) continue;
+      const rep = await fakeImage(info.mime, p);
+      text = text.split(raw).join(raw.includes("\\/") ? rep.replace(/\//g, "\\/") : rep);
+    }
+    return text;
+  }
+
+  /* ---------- 3. Blocs compressés (outil CRO) : décompresser, anonymiser, recompresser ---------- */
+  const b64ToBytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
+  const bytesToB64 = u => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+  const gunzip = async b => new TextDecoder().decode(await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+  const gzip = async t => new Uint8Array(await new Response(new Blob([new TextEncoder().encode(t)]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+  /* stockage séparé pour l'outil CRO (ouvert dans un cadre de la page) */
+  const CRO_PATCH = `<script>(function(){var P="demo:",S=Storage.prototype,g=S.getItem,s=S.setItem,r=S.removeItem;function k(t,x){return t===window.localStorage?P+x:x}S.getItem=function(x){return g.call(this,k(this,x))};S.setItem=function(x,v){return s.call(this,k(this,x),v)};S.removeItem=function(x){return r.call(this,k(this,x))}})();<\/script>`;
+  async function anonGz(text){
+    if (!("DecompressionStream" in window) || !("CompressionStream" in window)) return text;
+    const re = /(<script type="text\/plain" id="(\w+gz)">)([\s\S]*?)(<\/script>)/g, jobs = [];
+    let m;
+    while ((m = re.exec(text))) if (!/pdfworker/i.test(m[2])) jobs.push({ full: m[0], open: m[1], b64: m[3].trim(), close: m[4] });
+    for (const j of jobs){
+      try {
+        let t = await gunzip(b64ToBytes(j.b64)), isJson = false, html = t;
+        try { const v = JSON.parse(t); if (typeof v === "string"){ html = v; isJson = true; } } catch (e){}
+        html = await anonImages(anonText(html));
+        if (/<head>/i.test(html)) html = html.replace(/<head>/i, "<head>" + CRO_PATCH);
+        const out = bytesToB64(await gzip(isJson ? JSON.stringify(html) : html));
+        text = text.replace(j.full, () => j.open + out + j.close);
+      } catch (e){ console.warn("Démo : bloc compressé non modifié", j.open, e); }
+    }
+    return text;
+  }
+
+  /* ---------- 4. Données fictives ---------- */
+  const pad = n => String(n).padStart(2, "0");
+  const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const yearsAgo = (y, extraDays) => addDays(new Date(today().getFullYear() - y, today().getMonth(), today().getDate()), -extraDays);
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+  const nowIso = () => new Date().toISOString();
+  const sha256hex = async s => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].map(b => b.toString(16).padStart(2, "0")).join("");
+
+  function pickOp(ops, res){
+    for (const re of res){ const o = ops.find(o => re.test(o.name || "") && !o.lat); if (o) return o; }
+    return null;
+  }
+  /* jours de bloc : mardi (lieu A) et jeudi (lieu B), de 6 semaines avant à 10 semaines après */
+  function blocDays(lieuA, lieuB){
+    const out = [], d0 = today(), start = addDays(d0, -42);
+    for (let i = 0; i < 16 * 7; i++){
+      const d = addDays(start, i), w = d.getDay();
+      if (w === 2) out.push({ date: iso(d), lieu: lieuA, creneau: "Journée", off: Math.round((d - d0) / 864e5) });
+      if (w === 4) out.push({ date: iso(d), lieu: lieuB, creneau: "Journée", off: Math.round((d - d0) / 864e5) });
+    }
+    return out;
+  }
+  async function buildDemoData(seed){
+    const ops = seed.operations || [], inst = seed.institutions || [];
+    const L1 = (inst.find(i => i.id === "BO") || inst.find(i => i.bloc) || {}).id || "BO";
+    const L2 = (inst.find(i => i.id === "SJ") || inst.filter(i => i.bloc)[1] || {}).id || "SJ";
+    const days = blocDays(L1, L2);
+    const dayAt = (lieu, off) => { const c = days.filter(d => d.lieu === lieu); return c.reduce((b, d) => Math.abs(d.off - off) < Math.abs(b.off - off) ? d : b, c[0]); };
+    const P = (nom, prenom, sexe, ddn, o = {}) => ({ id: uid(), created: nowIso(), nom, prenom, sexe, ddn: iso(ddn),
+      tel: "06 00 00 " + pad(10 + Math.floor(Math.random() * 89)) + " " + pad(10 + Math.floor(Math.random() * 89)),
+      mail: `${prenom}.${nom}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z.]/g, "") + "@exemple.fr",
+      poids: o.poids ?? null, allergies: o.allergies || "", peni: !!o.peni, cmu: !!o.cmu, troubles: "", commentaire: o.commentaire || "Patient fictif (démonstration)" });
+    const OP = {
+      amygAdeno: pickOp(ops, [/^Pédiatrie # amygdalectomie\+adenoidectomie$/i, /amygdalectomie\+adenoidectomie/i]),
+      att: pickOp(ops, [/^Pédiatrie # pose d'ATT # bilat/i, /pose d'?ATT.*bilat/i]),
+      adenoAtt: pickOp(ops, [/^Pédiatrie # adenoidectomie et ATT/i, /adenoidectomie/i]),
+      amyg: pickOp(ops, [/^Pédiatrie # amygdalectomie # bilat/i, /amygdalectomie/i]),
+      septoTurbi: pickOp(ops, [/septoturbinoplastie/i, /septoplastie/i]),
+      thyro: pickOp(ops, [/Thyroidectomie totale/i, /thyro/i]),
+      uvpp: pickOp(ops, [/UVPP/i, /pharyngoplastie/i]),
+      tympano: pickOp(ops, [/myringoplastie # simple # gauche/i, /tympanoplastie/i]),
+      rhino: pickOp(ops, [/^Rhinologie # rhinoseptoplastie/i, /rhino(septo)?plastie/i]),
+      peau: pickOp(ops, [/exérèse lésion cutanée # superf <5cm2/i, /^Peau #/i]),
+      ethmo: pickOp(ops, [/ethmoidectomie # totale bilat\+septo/i, /ethmoidectomie/i]),
+      sousMax: pickOp(ops, [/sous-maxillectomie # droit/i, /sous-maxill/i]),
+      laryngo: pickOp(ops, [/Laryngoscopie \+ Exérèse nodule/i, /Laryngoscopie/i]),
+      otospon: pickOp(ops, [/otospongiose # droit/i, /otospongiose/i]),
+    };
+    const patients = {}, progs = {}, vacations = [];
+    const usedDays = new Map();
+    const prog = (p, op, { lieu, off, statut, modalite = "Ambulatoire", note, annul } = {}) => {
+      if (!op) return;
+      patients[p.id] ||= p;
+      let date = "";
+      if (off != null){ const d = dayAt(lieu, off); date = d.date; usedDays.set(d.date + "|" + d.lieu, d); }
+      const j = date ? Math.round((new Date(date + "T00:00:00") - today()) / 864e5) : null;
+      const suivi = {};
+      if (["Programmée", "Effectuée", "Annulée"].includes(statut)){ suivi.prog = true; if (j != null && j <= 21) suivi.rappel1 = true; if (j != null && j <= 3) suivi.rappel2 = true; }
+      if (statut === "Effectuée"){ suivi.postop = true; if (j <= -10) suivi.mutuelle = true; }
+      if (statut === "A programmer" || statut === "A confirmer") suivi.preprog = true;
+      const g = { id: uid(), created: addDays(today(), -30).toISOString(), updated: nowIso(), patientId: p.id, date, lieu: lieu || "",
+        statut, livret: "oui", motifs: [op.id], materiel: [], suivi, modalite, anesth: "Anesthésie générale", statutLe: nowIso() };
+      if (note) g.note = note;
+      if (statut === "Annulée"){ suivi.annulation = true; Object.assign(g, { annuleLe: addDays(today(), -2).toISOString(), motifAnnulation: annul || "Convenance personnelle", annulVue: true, annulPar: DEMO.dr.court }); }
+      progs[g.id] = g;
+    };
+    /* À venir, programmées */
+    prog(P("BERNARD", "Lucas", "Masculin", yearsAgo(6, 40), { poids: 21 }), OP.amygAdeno, { lieu: L1, off: 9, statut: "Programmée" });
+    prog(P("PETIT", "Emma", "Féminin", yearsAgo(3, 100), { poids: 14 }), OP.att, { lieu: L1, off: 9, statut: "Programmée" });
+    prog(P("MOREAU", "Julien", "Masculin", yearsAgo(42, 12), { poids: 82 }), OP.septoTurbi, { lieu: L2, off: 16, statut: "Programmée" });
+    prog(P("LAURENT", "Sophie", "Féminin", yearsAgo(37, 210), { poids: 64, allergies: "Pénicilline", peni: true }), OP.thyro, { lieu: L2, off: 23, statut: "Programmée", modalite: "Hospitalisation" });
+    prog(P("LEROY", "Thomas", "Masculin", yearsAgo(29, 55), { poids: 75 }), OP.rhino, { lieu: L1, off: 30, statut: "Programmée" });
+    prog(P("SIMON", "Camille", "Féminin", yearsAgo(52, 3), { poids: 58 }), OP.otospon, { lieu: L2, off: 44, statut: "Programmée", modalite: "Hospitalisation" });
+    /* À valider (date choisie, mails pas encore partis) / à programmer */
+    prog(P("DUBOIS", "Marc", "Masculin", yearsAgo(51, 80), { poids: 96 }), OP.uvpp, { lieu: L1, off: 37, statut: "A valider", modalite: "Hospitalisation" });
+    prog(P("ROUX", "Claire", "Féminin", yearsAgo(28, 300), { poids: 60 }), OP.tympano, { lieu: L2, off: 51, statut: "A valider" });
+    prog(P("FOURNIER", "Hugo", "Masculin", yearsAgo(4, 20), { poids: 17 }), OP.adenoAtt, { statut: "A programmer" });
+    prog(P("GIRARD", "Nathalie", "Féminin", yearsAgo(63, 150), { poids: 70, cmu: true }), OP.peau, { statut: "A programmer" });
+    prog(P("NICOLAS", "Gabriel", "Masculin", yearsAgo(46, 70), { poids: 88 }), OP.laryngo, { lieu: L1, off: 58, statut: "A confirmer" });
+    /* Passées, effectuées (CRO, facture, mutuelle J+10 à faire) */
+    prog(P("MOREL", "Chloé", "Féminin", yearsAgo(7, 15), { poids: 24 }), OP.amyg, { lieu: L1, off: -12, statut: "Effectuée" });
+    prog(P("FAURE", "Antoine", "Masculin", yearsAgo(45, 90), { poids: 79 }), OP.ethmo, { lieu: L2, off: -8, statut: "Effectuée", modalite: "Hospitalisation" });
+    prog(P("ANDRÉ", "Léa", "Féminin", yearsAgo(2, 200), { poids: 12 }), OP.att, { lieu: L1, off: -5, statut: "Effectuée" });
+    prog(P("MERCIER", "Paul", "Masculin", yearsAgo(67, 40), { poids: 72 }), OP.sousMax, { lieu: L2, off: -20, statut: "Effectuée", modalite: "Hospitalisation" });
+    /* Annulée */
+    prog(P("BLANC", "Inès", "Féminin", yearsAgo(31, 60), { poids: 55 }), OP.septoTurbi, { lieu: L2, off: 2, statut: "Annulée", annul: "Grossesse débutante (report)" });
+    /* Patient sans programmation */
+    const pz = P("LAMBERT", "Louis", "Masculin", yearsAgo(12, 30), { poids: 40, commentaire: "Patient fictif — consultation à revoir" }); patients[pz.id] = pz;
+    /* Vacations : tous les jours de bloc (mardi / jeudi), un congrès, un jour particulier */
+    for (const d of days) vacations.push({ id: uid(), date: d.date, creneau: d.creneau, lieu: d.lieu });
+    const fri = days.find(d => d.off > 14 && d.lieu === L2); if (fri) vacations.push({ id: uid(), date: iso(addDays(new Date(fri.date + "T00:00:00"), 1)), creneau: "Journée", conge: "Congrès (démo)", type: "indispo" });
+    const contacts = [
+      { id: uid(), inst: "CM", nom: "Secrétariat du Dr Martin", titre: "Madame", fonction: "Secrétaire", service: "Secrétariat", tel: "04.00.00.00.01", mail: "secretariat@cabinet-demo.fr" },
+      { id: uid(), inst: "CM", nom: "Julie GARNIER", titre: "Julie", fonction: "Aide opératoire", service: "Bloc opératoire", tel: "06.00.00.00.11", mail: "julie.garnier@exemple.fr" },
+      { id: uid(), inst: "CM", nom: "SantéDom Exemple", titre: "Madame, Monsieur", fonction: "Prestataire à domicile", service: "Prestataire", tel: "04.00.00.00.12", mail: "prestataire@exemple.fr" },
+      { id: uid(), inst: L1, nom: "Dr Anne DURAND", titre: "Chère consœur", fonction: "Anesthésiste", service: "Anesthésie", tel: "04.00.00.00.13", mail: "anesthesie@clinique-exemple.fr" },
+      { id: uid(), inst: L1, nom: "Accueil des admissions", titre: "Madame, Monsieur", fonction: "Admissions", service: "Admissions", tel: "04.00.00.00.14", mail: "admissions@clinique-exemple.fr" },
+      { id: uid(), inst: L2, nom: "Dr Marc LEFEBVRE", titre: "Cher confrère", fonction: "Anesthésiste", service: "Anesthésie", tel: "04.00.00.00.15", mail: "anesthesie@hopital-exemple.fr" },
+      { id: uid(), inst: L2, nom: "Bureau des admissions", titre: "Madame, Monsieur", fonction: "Admissions", service: "Admissions", tel: "04.00.00.00.16", mail: "admissions@hopital-exemple.fr" },
+    ];
+    return {
+      app: "bloc-orl", version: 1, created: nowIso(), savedAt: null, demo: { gen: DEMO.gen, le: nowIso() },
+      patients, progs, vacations, templates: {},
+      ref: { contacts },
+      settings: {
+        praticien: { nom: DEMO.dr.nom, ids: "00 0 00000 0", tel: "04.00.00.00.01", ville: "Marseille", mail: "cabinet.demo@exemple.fr" },
+        envoi: { url: DEMO.relais, cle: "demo-relais-simule-0000", test: false, testAdr: "cabinet.demo@exemple.fr" },
+        codeDoc: await sha256hex("blocorl175:" + DEMO.code),
+        secretaires: ["Sophie"],
+      },
+    };
+  }
+  /* base de la démo : données fictives créées à la première ouverture, recréées après 30 jours ou par « Réinitialiser la démo » ;
+     les référentiels (interventions, ordonnances, établissements) sont ceux de la version chargée au moment de la création */
+  const idbReq = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  async function prepareDb(seed){
+    const r = indexedDB.open(DEMO.db, 1); r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    const db = await idbReq(r);
+    const tx = (mode) => db.transaction("kv", mode).objectStore("kv");
+    let data = await idbReq(tx("readonly").get("data"));
+    if (data && data.__enc) data = null;                       // poste « protégé » dans la démo : on ne touche pas aux données
+    else if (!data || !data.demo || data.demo.gen !== DEMO.gen || Date.now() - new Date(data.demo.le).getTime() > 30 * 864e5) data = await buildDemoData(seed);
+    else data = null;                                           // données de démo existantes (moins de 30 jours) : gardées telles quelles
+    if (data) await idbReq(tx("readwrite").put(data, "data"));
+    const st = tx("readwrite");
+    st.put("browser", "mode");
+    if (!(await idbReq(tx("readonly").get("profil")))) await idbReq(tx("readwrite").put({ role: "doc" }, "profil"));
+    if (!(await idbReq(tx("readonly").get("poste")))) await idbReq(tx("readwrite").put("Poste démo", "poste"));
+    db.close();
+  }
+
+  /* ---------- 5. Mode démo, injecté en tête du logiciel ---------- */
+  function demoRuntime(cfg){
+    if (window.__BLOC_DEMO) return; window.__BLOC_DEMO = cfg;
+    /* 5.1 données séparées */
+    const open = IDBFactory.prototype.open, del = IDBFactory.prototype.deleteDatabase;
+    IDBFactory.prototype.open = function(name, ...a){ return open.call(this, name === "bloc-orl" ? cfg.db : name, ...a); };
+    IDBFactory.prototype.deleteDatabase = function(name, ...a){ return del.call(this, name === "bloc-orl" ? cfg.db : name, ...a); };
+    const P = "demo:", S = Storage.prototype, gi = S.getItem, si = S.setItem, ri = S.removeItem;
+    const key = (t, k) => t === window.localStorage ? P + k : k;
+    S.getItem = function(k){ return gi.call(this, key(this, k)); };
+    S.setItem = function(k, v){ return si.call(this, key(this, k), v); };
+    S.removeItem = function(k){ return ri.call(this, key(this, k)); };
+    const lsGet = (k, d) => { try { const v = gi.call(localStorage, P + "__" + k); return v ? JSON.parse(v) : d; } catch (e){ return d; } };
+    const lsSet = (k, v) => { try { si.call(localStorage, P + "__" + k, JSON.stringify(v)); } catch (e){} };
+    /* 5.2 relais Gmail simulé, Google Drive coupé */
+    const json = o => new Response(JSON.stringify(o), { status: 200, headers: { "Content-Type": "application/json" } });
+    const logMail = (to, subject, n, quand) => {
+      const L = lsGet("mails", []); L.unshift({ at: new Date().toISOString(), to: String(to || ""), subject: subject || "", pj: n || 0, quand: quand || "" });
+      lsSet("mails", L.slice(0, 300)); ribbon(); notice(`✉ Mail simulé, non envoyé : ${String(to || "").split(",")[0]}${quand ? " (" + quand + ")" : ""}`);
+    };
+    async function relais(url, init){
+      let b = {}; try { b = JSON.parse(init && init.body || "{}"); } catch (e){}
+      if (/[?&]a=/.test(url)) return json({ ok: true, demo: true });
+      const plans = lsGet("plans", {});
+      const flush = () => { const now = Date.now(); for (const [id, p] of Object.entries(plans)) if (!p.envoyeLe && new Date(p.at).getTime() <= now){ p.envoyeLe = new Date().toISOString(); logMail(p.to, p.subject, p.pj, "envoi programmé"); } lsSet("plans", plans); };
+      switch (b.action){
+        case "version": return json({ ok: true, version: 3, quota: 1500 });
+        case "planifier": plans[b.id] = { at: b.at, to: b.mail && b.mail.to, subject: b.mail && b.mail.subject, pj: ((b.mail || {}).attachments || []).length }; lsSet("plans", plans); notice("✉ Envoi programmé simulé"); return json({ ok: true, id: b.id });
+        case "etatPlanifies": flush(); return json({ ok: true, etats: Object.fromEntries((b.ids || []).filter(id => plans[id]).map(id => [id, plans[id].envoyeLe ? { etat: "envoye", envoyeLe: plans[id].envoyeLe } : { etat: "attente" }])) });
+        case "annulerPlanifie": delete plans[b.id]; lsSet("plans", plans); return json({ ok: true });
+        case "etatMutuelle": return json({ ok: true, etats: {} });
+        case "mutDepot": if (b.mail) logMail(b.mail.to, b.mail.subject, (b.mail.attachments || []).length, "mutuelle"); return json({ ok: true });
+        case "mutAttest": return json({ ok: true });
+      }
+      if (b.test) return json({ ok: true, version: 3, quota: 1500 });
+      if (b.to){ logMail(b.to, b.subject, (b.attachments || []).length); return json({ ok: true, demo: true }); }
+      return json({ ok: true, demo: true });
+    }
+    const of = window.fetch.bind(window);
+    window.fetch = function(input, init){
+      const url = String(input && input.url || input || "");
+      if (/^https:\/\/script\.google(usercontent)?\.com\//.test(url)){
+        if (url.indexOf(cfg.relais.split("/exec")[0]) === 0) return new Promise(r => setTimeout(() => r(relais(url, init)), 250));
+        return Promise.reject(new TypeError("démonstration : Google Drive est désactivé"));
+      }
+      return of(input, init);
+    };
+    /* 5.3 pas de messagerie ni de Gmail */
+    const blocked = u => /^(mailto:|sms:)|^https:\/\/mail\.google\.com/i.test(String(u || ""));
+    const wo = window.open;
+    window.open = function(u, ...a){ if (blocked(u)){ notice("Démo : la messagerie ne s'ouvre pas (aucun mail envoyé)"); return null; } return wo.call(window, u, ...a); };
+    Object.defineProperty(window, "__demoMailto", { configurable: true, set(v){ notice("Démo : la messagerie ne s'ouvre pas (aucun mail envoyé)"); } });
+    document.addEventListener("click", e => { const a = e.target.closest && e.target.closest("a[href]"); if (a && blocked(a.getAttribute("href"))){ e.preventDefault(); e.stopPropagation(); notice("Démo : la messagerie ne s'ouvre pas (aucun mail envoyé)"); } }, true);
+    /* 5.4 bandeau « Démo » */
+    let ribbonEl, noticeEl;
+    function css(){
+      const s = document.createElement("style");
+      s.textContent = `.storebar,[data-act="driveSetup"]{display:none!important}
+      #demoRib{position:fixed;right:10px;bottom:10px;z-index:2147483000;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 20px);
+        background:#fff7e0;border:1px solid #e0b84a;color:#5a4300;border-radius:999px;padding:5px 6px 5px 12px;font:600 12px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+      #demoRib button{font:inherit;border:1px solid #e0b84a;background:#fff;color:#5a4300;border-radius:999px;padding:4px 9px;cursor:pointer}
+      #demoRib.min span.x{display:none}
+      #demoNot{position:fixed;left:50%;transform:translateX(-50%);bottom:56px;z-index:2147483000;background:#1d2433;color:#fff;border-radius:8px;padding:8px 12px;font:13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;max-width:calc(100vw - 32px);box-shadow:0 4px 16px rgba(0,0,0,.25)}
+      #demoPanel{position:fixed;inset:0;z-index:2147483001;background:rgba(20,24,33,.45);display:grid;place-items:center;padding:16px}
+      #demoPanel .p{background:#fff;color:#1d2433;border-radius:12px;max-width:640px;width:100%;max-height:80vh;overflow:auto;padding:16px 18px;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+      #demoPanel h2{margin:0 0 6px;font-size:18px} #demoPanel table{width:100%;border-collapse:collapse;font-size:13px} #demoPanel td{border-top:1px solid #e6e9ef;padding:5px 4px;vertical-align:top}
+      #demoPanel .r{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap} #demoPanel button{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid #c9d0db;background:#fff;cursor:pointer}
+      #demoPanel button.d{background:#b42318;border-color:#b42318;color:#fff}`;
+      document.head.appendChild(s);
+    }
+    function ribbon(){
+      if (!document.body) return;
+      if (!ribbonEl){
+        ribbonEl = document.createElement("div"); ribbonEl.id = "demoRib";
+        ribbonEl.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) { ribbonEl.classList.toggle("min"); return; } if (b.dataset.d === "info") panel(); });
+        document.body.appendChild(ribbonEl);
+      }
+      const n = lsGet("mails", []).length;
+      ribbonEl.innerHTML = `<span>DÉMO</span><span class="x">· données fictives · ${n} mail${n > 1 ? "s" : ""} simulé${n > 1 ? "s" : ""}</span><button type="button" data-d="info">Infos</button>`;
+    }
+    function notice(t){
+      if (!document.body) return;
+      if (!noticeEl){ noticeEl = document.createElement("div"); noticeEl.id = "demoNot"; document.body.appendChild(noticeEl); }
+      noticeEl.textContent = t; noticeEl.hidden = false; clearTimeout(notice.h); notice.h = setTimeout(() => noticeEl.hidden = true, 3500);
+    }
+    const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    function panel(){
+      const L = lsGet("mails", []), o = document.createElement("div"); o.id = "demoPanel";
+      o.innerHTML = `<div class="p"><h2>Version de démonstration</h2>
+        <p>Bloc ORL <b>${esc(window.BLOC_VERSION || cfg.version || "")}</b>, chargé depuis la version de référence : la démo suit automatiquement chaque nouvelle version.</p>
+        <p>Chirurgien, patients et intervenants sont <b>fictifs</b>. Les données restent dans ce navigateur (base séparée de celle du cabinet). <b>Aucun mail n'est envoyé</b> : les envois sont simulés et listés ci-dessous ; la messagerie et Gmail ne s'ouvrent pas. Google Drive est désactivé.</p>
+        <p>Profils : <b>Docteur</b> (code <b>${esc(cfg.code)}</b>) et <b>Secrétariat</b> — « Changer de profil » en bas du menu.</p>
+        <h3 style="margin:12px 0 4px;font-size:15px">Mails simulés (${L.length})</h3>
+        ${L.length ? `<table>${L.slice(0, 100).map(m => `<tr><td style="white-space:nowrap">${esc(new Date(m.at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }))}</td><td>${esc(m.to)}</td><td>${esc(m.subject)}${m.pj ? ` <span style="color:#5b6475">· ${m.pj} PJ</span>` : ""}${m.quand ? ` <span style="color:#5b6475">· ${esc(m.quand)}</span>` : ""}</td></tr>`).join("")}</table>` : `<p style="color:#5b6475">Aucun pour l'instant.</p>`}
+        <div class="r"><button type="button" data-d="clear">Vider la liste</button><button type="button" class="d" data-d="reset">Réinitialiser la démo</button><button type="button" data-d="close">Fermer</button></div></div>`;
+      o.addEventListener("click", async e => {
+        const b = e.target.closest("button"); if (e.target === o || (b && b.dataset.d === "close")){ o.remove(); return; }
+        if (!b) return;
+        if (b.dataset.d === "clear"){ lsSet("mails", []); o.remove(); ribbon(); panel(); }
+        if (b.dataset.d === "reset" && confirm("Revenir aux données fictives de départ ? Les modifications faites dans la démo seront effacées.")){
+          b.disabled = true; b.textContent = "Réinitialisation…";
+          try { if (typeof IDB !== "undefined" && IDB.db) IDB.db.close(); } catch (er){}
+          try { for (let i = localStorage.length - 1; i >= 0; i--){ const k = localStorage.key(i); if (k && k.indexOf(P) === 0) ri.call(localStorage, k); } } catch (er){}
+          await new Promise(r => { const q = del.call(indexedDB, cfg.db); q.onsuccess = q.onerror = q.onblocked = () => r(); setTimeout(r, 3000); });
+          location.reload();
+        }
+      });
+      document.body.appendChild(o);
+    }
+    const ready = () => { css(); ribbon(); };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready); else ready();
+  }
+
+  /* ---------- 6. Chargement ---------- */
+  async function fetchText(url){
+    const r = await fetch(url, { cache: "no-cache" });
+    if (!r.ok) throw new Error(`${url} : erreur ${r.status}`);
+    if (!r.body || !r.body.getReader) return r.text();
+    const rd = r.body.getReader(), parts = []; let n = 0;
+    for (;;){ const { done, value } = await rd.read(); if (done) break; parts.push(value); n += value.length; say(`Chargement de la dernière version… ${(n / 1e6).toFixed(1)} Mo`, 8 + Math.min(62, n / 15.5e6 * 62)); }
+    return new TextDecoder("utf-8").decode(await new Blob(parts).arrayBuffer());
+  }
+  async function main(){
+    if (!window.indexedDB || !window.crypto || !crypto.subtle) throw new Error("ce navigateur est trop ancien pour la démonstration");
+    let html = await fetchText("index.html");
+    const version = (/BLOC_VERSION\s*=\s*"([^"]+)"/.exec(html) || [])[1] || "";
+    say(`Préparation de la démonstration (Bloc ORL ${version})…`, 74);
+    html = anonText(html);
+    say("Remplacement de l'identité du praticien…", 80);
+    html = await anonImages(html);
+    html = await anonGz(html);
+    /* les redirections vers la messagerie (location.href = mailto…) passent par le mode démo */
+    html = html.replace(/location\.href\s*=\s*(?=mailtoUrl\(|`mailto:|"mailto:|'mailto:)/g, "window.__demoMailto = ");
+    const sm = /<script type="application\/json" id="seed">([\s\S]*?)<\/script>/.exec(html);
+    if (!sm) throw new Error("référentiels introuvables dans index.html");
+    say("Préparation des données fictives…", 90);
+    await prepareDb(JSON.parse(sm[1]));
+    const cfg = { db: DEMO.db, relais: DEMO.relais, code: DEMO.code, version };
+    const inject = `<script>(${demoRuntime.toString()})(${JSON.stringify(cfg)});<\/script>`;
+    const at = html.search(/<head[^>]*>/i);
+    if (at < 0) throw new Error("index.html inattendu (pas de <head>)");
+    const end = html.indexOf(">", at) + 1;
+    html = html.slice(0, end) + inject + html.slice(end);
+    say("Ouverture…", 100);
+    await new Promise(r => setTimeout(r, 30));
+    document.open(); document.write(html); document.close();
+  }
+  main().catch(fail);
+})();
+</script>
+</body></html>
