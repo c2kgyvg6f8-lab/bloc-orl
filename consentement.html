@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Dr Derkenne – Consentement chirurgical</title>
+<style>
+:root{--ink:#22303a;--navy:#14384a;--line:#d5dde3;--bg:#f3f5f7}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Arial,Helvetica,sans-serif}
+.card{max-width:620px;margin:24px auto;background:#fff;border:1px solid var(--line);border-radius:8px;padding:22px 22px 18px}
+@media (max-width:640px){.card{margin:12px;padding:18px 16px}}
+.hd{border-bottom:1.5px solid #1f4e66;padding-bottom:10px;margin-bottom:16px}
+.hd b{display:block;font-size:18px;color:var(--navy)}.hd span{font-size:12px;color:#4b5963}
+h1{font-size:15px;letter-spacing:.12em;text-align:center;color:var(--navy);margin:4px 0 14px;text-transform:uppercase}
+h2{font-size:16px;color:var(--navy);margin:0 0 6px}
+.pat{background:#f3f6f8;border:1px solid var(--line);border-radius:4px;padding:8px 12px;margin:0 0 14px;font-size:14px}
+.box{border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:12px 0}
+.box.on{border:2px solid #1f8a4c;background:#f6fcf7}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 16px;margin:8px 8px 0 0;border-radius:7px;border:2px solid #14384a;background:#14384a;color:#fff;font:700 15px Arial,sans-serif;cursor:pointer;text-decoration:none}
+.btn.g{background:#1f8a4c;border-color:#1f8a4c}
+.btn.w{background:#fff;color:#14384a}
+.btn[disabled]{opacity:.55;cursor:default}
+.hint{font-size:13px;color:#5f6b75;margin:6px 0 0}
+.msg{border-radius:6px;padding:12px 14px;margin:12px 0 0;font-size:15px}
+.ok{background:#effbea;border:1px solid #9bd3a3;color:#1d4d22;font-weight:700}
+.warn{background:#fff6e5;border:1px solid #e3b25a;color:#5a3a00}
+.ko{background:#fde3e3;border:1px solid #e9a3a3;color:#7a1414}
+ul.files{list-style:none;padding:0;margin:10px 0 0}
+ul.files li{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #eef1f4;font-size:14px}
+ul.files img{width:46px;height:46px;object-fit:cover;border-radius:4px;border:1px solid var(--line)}
+ul.files button{margin-left:auto;border:1px solid #d5dde3;background:#fff;border-radius:6px;padding:3px 8px;cursor:pointer}
+.ft{font-size:12px;color:#6a737b;text-align:center;margin-top:18px}
+[hidden]{display:none!important}
+</style></head>
+<body>
+<main class="card">
+  <div class="hd"><b>Docteur Renaud DERKENNE</b><span>Oto-Rhino-Laryngologie · 143 chemin de Gibbes, 13014 Marseille · 04.91.63.65.25</span></div>
+  <h1>Consentement chirurgical</h1>
+  <div class="pat" id="pat" hidden></div>
+  <p id="intro">Le consentement chirurgical doit nous être retourné <b id="qui">signé</b> avant l'intervention : sans lui, l'intervention devra être annulée.</p>
+
+  <section class="box" id="b-dl">
+    <h2>1. Télécharger le consentement à signer</h2>
+    <button class="btn" id="dl">⬇ Télécharger le consentement à signer</button>
+    <p class="hint">Imprimez-le, signez-le<span id="qui2"></span>, puis envoyez-le ci-dessous. Le consentement est aussi joint au mail que vous avez reçu.</p>
+    <div id="m-dl"></div>
+  </section>
+
+  <section class="box" id="b-up">
+    <h2>2. Envoyer le consentement signé</h2>
+    <div>
+      <label class="btn g" id="lab-photo" hidden>📷 Prendre une photo<input type="file" id="f-photo" accept="image/*" capture="environment" hidden></label>
+      <label class="btn g" id="lab-file">📎 <span id="lab-file-t">Choisir le fichier (PDF ou photo)</span><input type="file" id="f-file" accept="application/pdf,image/*" multiple hidden></label>
+    </div>
+    <p class="hint" id="h-photo" hidden>Photographiez chaque page à plat, bien éclairée et entière. Vous pouvez ajouter plusieurs photos.</p>
+    <ul class="files" id="files" hidden></ul>
+    <button class="btn" id="send" hidden>Envoyer au cabinet</button>
+    <div id="m-up"></div>
+  </section>
+
+  <p class="hint" id="aide">Une question sur l'intervention ? Le Docteur Derkenne peut y répondre : répondez au mail reçu ou écrivez au secrétariat (<a id="mail-s" href="#"></a>).</p>
+  <div class="ft">Ce lien est personnel. Aucune donnée n'est conservée sur cette page.</div>
+</main>
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var P = {}; (location.hash || "").replace(/^#/, "").split("&").forEach(function(kv){ var i = kv.indexOf("="); if (i > 0) P[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, " ")); });
+  var T = P.t || "", U = P.u || "", SEC = P.s || "medigibbes14@orange.fr", relais = /^https:\/\/script\.google(usercontent)?\.com\//.test(U) && /^[A-Za-z0-9]{24,64}$/.test(T);
+  if (P.n){ $("pat").hidden = false; $("pat").innerHTML = (P.k ? "Enfant : " : "Patient : ") + "<b></b>" + (P.d ? " · intervention du " + P.d : ""); $("pat").querySelector("b").textContent = P.n; }
+  if (P.k){ $("qui").textContent = "signé par les deux parents (ou par le tuteur légal)"; $("qui2").textContent = " (les deux parents)"; }
+  $("mail-s").textContent = SEC; $("mail-s").href = "mailto:" + SEC + "?subject=" + encodeURIComponent("Consentement chirurgical" + (P.n ? " – " + P.n : ""));
+  var mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
+  if (mobile){ $("lab-photo").hidden = false; $("h-photo").hidden = false; $("lab-file-t").textContent = "Choisir un fichier"; }
+  var secours = "Le consentement est joint au mail que vous avez reçu. Vous pouvez aussi le renvoyer signé par mail à " + SEC + ".";
+  function msg(id, cls, txt){ $(id).innerHTML = txt ? '<div class="msg ' + cls + '"></div>' : ""; if (txt) $(id).firstChild.textContent = txt; }
+  function appel(params, ms){
+    if (!relais) return Promise.reject("lien");
+    var q = []; for (var k in params) q.push(k + "=" + encodeURIComponent(params[k]));
+    var url = U + (U.indexOf("?") < 0 ? "?" : "&") + q.join("&");
+    var delai = new Promise(function(res, rej){ setTimeout(function(){ rej("delai"); }, ms || 30000); });
+    var req = fetch(url, { method: "GET", redirect: "follow", credentials: "omit" }).then(function(r){ return r.text(); }, function(){ throw "reseau"; })
+      .then(function(t){ var r; try { r = JSON.parse(t); } catch (e) { throw "erreur"; } if (r && r.service && !("cc" in r) && !("data" in r)) throw "ancien"; return r; });
+    return Promise.race([req, delai]);
+  }
+  var ERR = { lien: "Ce lien est incomplet.", delai: "Le service ne répond pas pour le moment.", reseau: "Connexion impossible (vérifiez votre accès internet).", erreur: "Le service est momentanément indisponible.", ancien: "Le service n'est pas encore disponible.", "lien expiré": "Ce lien n'est plus valable.", "lien invalide": "Ce lien n'est pas valable." };
+  var errTxt = function(e){ return (ERR[e] || ERR.erreur) + " " + secours; };
+  /* déjà renvoyé ? */
+  if (relais) appel({ a: "ccinfo", t: T }, 20000).then(function(r){ if (r && r.ok && r.recu) msg("m-up", "ok", "✓ Votre consentement signé nous est bien parvenu le " + new Date(r.recu).toLocaleDateString("fr-FR") + ". Merci ! (Vous pouvez en renvoyer un nouveau si besoin.)"); }, function(){});
+  /* 1. téléchargement */
+  function telecharger(){
+    $("dl").disabled = true; msg("m-dl", "warn", "Téléchargement en cours…");
+    appel({ a: "ccpdf", t: T }, 40000).then(function(r){
+      $("dl").disabled = false;
+      if (!r || !r.ok || !r.data){ msg("m-dl", "ko", errTxt(r && r.error)); return; }
+      var bin = atob(r.data), a = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+      var blob = new Blob([a], { type: "application/pdf" }), url = URL.createObjectURL(blob), lk = document.createElement("a");
+      lk.href = url; lk.download = r.name || "Consentement.pdf"; document.body.appendChild(lk); lk.click(); lk.remove();
+      msg("m-dl", "ok", "✓ Consentement téléchargé (" + (r.name || "Consentement.pdf") + "). S'il ne s'est pas ouvert, regardez dans vos téléchargements.");
+    }, function(e){ $("dl").disabled = false; msg("m-dl", "ko", errTxt(e)); });
+  }
+  $("dl").onclick = telecharger;
+  /* 2. envoi */
+  var files = [];
+  function liste(){
+    var ul = $("files"); ul.innerHTML = ""; ul.hidden = !files.length; $("send").hidden = !files.length;
+    files.forEach(function(f, i){
+      var li = document.createElement("li");
+      if (/^image\//.test(f.type)){ var im = document.createElement("img"); im.src = URL.createObjectURL(f); li.appendChild(im); }
+      else { var sp = document.createElement("span"); sp.textContent = "📄"; li.appendChild(sp); }
+      var nm = document.createElement("span"); nm.textContent = f.name || ("Photo " + (i + 1)); li.appendChild(nm);
+      var x = document.createElement("button"); x.type = "button"; x.textContent = "Retirer"; x.onclick = function(){ files.splice(i, 1); liste(); }; li.appendChild(x);
+      ul.appendChild(li);
+    });
+    if (files.length) $("lab-file-t").textContent = mobile ? "Ajouter un fichier" : "Ajouter un fichier";
+  }
+  function ajouter(list){ for (var i = 0; i < list.length; i++){ var f = list[i]; if (/^(application\/pdf|image\/)/.test(f.type) || /\.(pdf|jpe?g|png|heic|heif)$/i.test(f.name)) files.push(f); } liste(); msg("m-up", "", ""); }
+  $("f-photo").onchange = function(){ ajouter(this.files); this.value = ""; };
+  $("f-file").onchange = function(){ ajouter(this.files); this.value = ""; };
+  function lireB64(blob){ return new Promise(function(res, rej){ var r = new FileReader(); r.onload = function(){ res(String(r.result).split(",")[1] || ""); }; r.onerror = rej; r.readAsDataURL(blob); }); }
+  /* photos réduites (2200 px, JPEG) : envoi plus rapide, toujours lisible */
+  function preparer(f, i){
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) return lireB64(f).then(function(d){ return { name: f.name || ("Consentement_" + (i + 1)), type: f.type || "application/pdf", data: d }; });
+    return new Promise(function(res){
+      var im = new Image(); im.onload = function(){
+        var s = Math.min(1, 2200 / Math.max(im.width, im.height)), c = document.createElement("canvas"); c.width = Math.round(im.width * s); c.height = Math.round(im.height * s);
+        var x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+        res({ name: "Consentement_signe_" + (i + 1) + ".jpg", type: "image/jpeg", data: c.toDataURL("image/jpeg", 0.82).split(",")[1] });
+      };
+      im.onerror = function(){ lireB64(f).then(function(d){ res({ name: f.name, type: f.type, data: d }); }); };
+      im.src = URL.createObjectURL(f);
+    });
+  }
+  $("send").onclick = function(){
+    if (!files.length) return;
+    if (!relais){ msg("m-up", "ko", errTxt("lien")); return; }
+    $("send").disabled = true; msg("m-up", "warn", "Envoi en cours…");
+    Promise.all(files.map(preparer)).then(function(fx){
+      var total = fx.reduce(function(s, x){ return s + x.data.length; }, 0);
+      if (total > 11000000){ $("send").disabled = false; msg("m-up", "ko", "Fichier trop volumineux (8 Mo au maximum). Réessayez avec une photo, ou envoyez-le par mail à " + SEC + "."); return; }
+      return fetch(U, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "ccPatRetour", t: T, fichiers: fx }) })
+        .then(function(){ return new Promise(function(r){ setTimeout(r, 1500); }); })
+        .then(function(){ return appel({ a: "ccinfo", t: T }, 30000); })
+        .then(function(r){
+          $("send").disabled = false;
+          if (r && r.ok && r.recu){ files = []; liste(); msg("m-up", "ok", "✓ Merci ! Votre consentement signé a bien été transmis au cabinet du Docteur Derkenne."); $("b-up").className = "box on"; }
+          else msg("m-up", "ko", "L'envoi n'a pas pu être confirmé. " + secours);
+        });
+    }).catch(function(e){ $("send").disabled = false; msg("m-up", "ko", errTxt(e)); });
+  };
+  /* arrivée depuis le mail : téléchargement lancé, ou partie « envoi » mise en avant */
+  if (!relais){ msg("m-dl", "warn", secours); }
+  else if (P.a === "dl") setTimeout(telecharger, 300);
+  if (P.a === "up"){ $("b-up").className = "box on"; setTimeout(function(){ $("b-up").scrollIntoView({ behavior: "smooth", block: "start" }); }, 200); }
+})();
+</script>
+</body></html>
