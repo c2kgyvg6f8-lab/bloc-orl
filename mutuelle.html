@@ -63,6 +63,7 @@ a.ch{text-decoration:none}
     <button class="ch b" id="b-mut">Je souhaite un mail pré-rempli pour expliquer ma situation à ma mutuelle</button>
     <a class="ch r" id="mail-cab" href="#"></a>
     <a class="ch o" id="mail-att" href="#">Je veux que l'hôpital Saint-Joseph m'envoie une attestation de dépassement d'honoraires</a>
+    <div class="msg info" id="etab-etat" hidden></div>
    </div>
    <svg id="cx" aria-hidden="true"></svg>
   </div>
@@ -186,7 +187,7 @@ a.ch{text-decoration:none}
     });
   }
   function enregistrer(fi){ var url = URL.createObjectURL(fi.blob), a = document.createElement("a"); a.href = url; a.download = fi.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); }, 60000); }
-  var dls = document.querySelectorAll("button.dl[data-dl]"), ATTEST = false;
+  var dls = document.querySelectorAll("button.dl[data-dl]"), ATTEST = false, ETAB = false;
   for (var j = 0; j < dls.length; j++){
     var isAtt = dls[j].getAttribute("data-dl") === "att";
     dls[j].hidden = isAtt;
@@ -198,6 +199,7 @@ a.ch{text-decoration:none}
     };
   }
   if (relais) appel({ a: "mutinfo", t: T }, 20000).then(function(res){
+    if (res && res.ok && res.etab) ETAB = true;   // relais v6 : la demande d'attestation part de la boîte du Dr Derkenne
     if (res && res.ok && res.attest){ ATTEST = true; for (var k = 0; k < dls.length; k++) if (dls[k].getAttribute("data-dl") === "att") dls[k].hidden = false; majPJ(); }
   }, function(){});
 
@@ -267,7 +269,17 @@ a.ch{text-decoration:none}
     } else if (r) noter(r);
   }
   $("mail-cab").addEventListener("click", function(){ noter("kocab"); });
-  $("mail-att").addEventListener("click", function(){ noter("koatt"); });
+  $("mail-att").addEventListener("click", function(e){
+    if (!ETAB){ noter("koatt"); return; }   // ancien lien : le mail s'ouvre dans la messagerie du patient
+    e.preventDefault(); var a = this; if (a.dataset.envoi) return; a.dataset.envoi = "1"; diag("");
+    var et = $("etab-etat"), qui = L === "BO" ? "la clinique Bonneveine" : "l'hôpital Saint-Joseph";
+    et.hidden = false; et.textContent = "Envoi de la demande…";
+    noter("koatt", true).then(function(res){
+      if (res && (res.envoye || res.dejaEnvoye)) et.innerHTML = "<b>Le Dr Derkenne vient d'envoyer à " + qui + " la demande d'attestation de dépassement d'honoraires</b>, avec la facture acquittée. L'attestation vous sera adressée par " + qui + ".";
+      else { et.hidden = true; location.href = a.href; }   // en cas d'échec : mail depuis la messagerie du patient
+      a.dataset.envoi = "";
+    });
+  });
 
   /* Connecteurs entre « Ma mutuelle ne veut pas me rembourser » et les 3 choix */
   var tree = $("tree"), br = $("br"), cx = $("cx"), bko = $("b-ko");
