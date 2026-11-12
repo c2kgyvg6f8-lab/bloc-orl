@@ -117,7 +117,23 @@ a.ch{text-decoration:none}
     .concat(g("m") ? ["Dépassement d'honoraires réglé : " + g("m") + " €"] : []);
   var list = details.map(function(x){ return "- " + x; }).join("\n");
   var fin = "\n\nJe vous remercie par avance et vous prie d'agréer, Madame, Monsieur, mes salutations distinguées.\n\n" + (child ? "" : np);
-  function mailto(to, subject, body){ return "mailto:" + to + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body); }
+  /* retours à la ligne en CRLF (norme des liens mailto : certaines messageries ignorent sinon le texte) */
+  function enc(t){ return encodeURIComponent(String(t || "").replace(/\r?\n/g, "\r\n")); }
+  var MAILS = {};
+  function mailto(to, subject, body, id){ if (id) MAILS[id] = { to: to, subject: subject, body: body }; return "mailto:" + to + "?subject=" + enc(subject) + "&body=" + enc(body); }
+  /* Secours si la messagerie s'ouvre sans le texte : le mail est affiché sous le bouton, avec « Copier le texte » */
+  function secours(id){
+    var m = MAILS[id], el = $(id); if (!m || !el) return;
+    var box = $("sec-" + id); if (!box){ box = document.createElement("div"); box.id = "sec-" + id; box.className = "msg info"; el.parentNode.insertBefore(box, el.nextSibling); }
+    box.innerHTML = "Votre messagerie s'ouvre. <b>Si le texte du mail n'y apparaît pas</b>, copiez-le ci-dessous et collez-le dans le mail" + (m.to ? " (destinataire : <b>" + m.to.replace(/</g, "&lt;") + "</b>)" : "") + ".<br>Objet : <b>" + m.subject.replace(/</g, "&lt;") + "</b>" +
+      '<textarea readonly style="width:100%;min-height:150px;margin-top:6px;font:13px/1.4 Arial,sans-serif;box-sizing:border-box"></textarea><button type="button" class="dl">Copier le texte</button>';
+    box.querySelector("textarea").value = m.body;
+    box.querySelector("button").onclick = function(){ var b = this, ta = box.querySelector("textarea");
+      var ok = function(){ b.textContent = "Texte copié ✓"; setTimeout(function(){ b.textContent = "Copier le texte"; }, 2500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(m.body).then(ok, function(){ ta.select(); document.execCommand("copy"); ok(); });
+      else { ta.select(); document.execCommand("copy"); ok(); } };
+    setTimeout(relier, 0);
+  }
   var ref = np + (g("ds") ? " – opération du " + g("ds") : "");
   var x = g("x"), pr = g("pr"), nom = g("no"), signe = child ? "Parent de " + pr + " " + nom : pr + " " + nom;
   var etabL = L === "BO" ? "Clinique Bonneveine (Marseille)" : "Hôpital Saint-Joseph (Marseille)";
@@ -132,13 +148,13 @@ a.ch{text-decoration:none}
     "\n\n" + etabC + " est un établissement de santé privé d'intérêt collectif (ESPIC).\n\n" + trait + "\n" + ESPIC + "\n" + trait +
     "\n\nVous trouverez ci-joint :\n- la facture acquittée du Dr Derkenne ;\n- " + (L === "BO" ? "l'attestation de dépassement d'honoraires délivrée par la Clinique Bonneveine." : "l'attestation de frais engagés délivrée par l'Hôpital Saint-Joseph.") +
     "\n\nJe vous demande donc de bien vouloir procéder à mon remboursement.\n\nJe vous prie d'agréer, Madame, Monsieur, l'expression de mes salutations distinguées.\n\n" + signe;
-  $("mailto-mut").href = "mailto:?subject=" + encodeURIComponent(objetMut) + "&body=" + encodeURIComponent(lettre);
+  $("mailto-mut").href = mailto("", objetMut, lettre, "mailto-mut");
   $("mail-cab").href = mailto(g("c") || "medigibbes14@orange.fr", "Remboursement du dépassement d'honoraires – " + ref,
     "Madame, Monsieur,\n\nJe ne parviens pas à me faire rembourser par ma mutuelle le dépassement d'honoraires pour :\n" + list +
-    "\n\nJ'ai déjà transmis à ma mutuelle la facture acquittée du Dr Derkenne et " + attLib + ".\n\nPouvez-vous m'indiquer la marche à suivre ?" + fin);
+    "\n\nJ'ai déjà transmis à ma mutuelle la facture acquittée du Dr Derkenne et " + attLib + ".\n\nPouvez-vous m'indiquer la marche à suivre ?" + fin, "mail-cab");
   $("mail-att").textContent = "Je veux que " + (L === "BO" ? "la clinique Bonneveine" : "l'hôpital Saint-Joseph") + " m'envoie une attestation de dépassement d'honoraires";
   $("mail-att").href = mailto(g("a") || (L === "BO" ? "ambulatoire@clinique-de-bonneveine.fr" : "PEC@hopital-saint-joseph.fr"), "Demande d'attestation de dépassement d'honoraires – " + ref,
-    "Madame, Monsieur,\n\nJe vous demande de bien vouloir me faire parvenir une attestation de dépassement d'honoraires pour :\n" + list + fin);
+    "Madame, Monsieur,\n\nJe vous demande de bien vouloir me faire parvenir une attestation de dépassement d'honoraires pour :\n" + list + fin, "mail-att");
 
   /* ---------- Relais du Dr Derkenne (jeton seulement, aucune donnée personnelle dans l'adresse) ---------- */
   var T = g("t"), U = g("u"), relais = /^[A-Za-z0-9]{24,64}$/.test(T) && /^https:\/\/script\.google(usercontent)?\.com\//.test(U);
@@ -268,15 +284,16 @@ a.ch{text-decoration:none}
       });
     } else if (r) noter(r);
   }
-  $("mail-cab").addEventListener("click", function(){ noter("kocab"); });
+  $("mail-cab").addEventListener("click", function(){ noter("kocab"); secours("mail-cab"); });
+  $("mailto-mut").addEventListener("click", function(){ secours("mailto-mut"); });
   $("mail-att").addEventListener("click", function(e){
-    if (!ETAB){ noter("koatt"); return; }   // ancien lien : le mail s'ouvre dans la messagerie du patient
+    if (!ETAB){ noter("koatt"); secours("mail-att"); return; }   // ancien lien : le mail s'ouvre dans la messagerie du patient
     e.preventDefault(); var a = this; if (a.dataset.envoi) return; a.dataset.envoi = "1"; diag("");
     var et = $("etab-etat"), qui = L === "BO" ? "la clinique Bonneveine" : "l'hôpital Saint-Joseph";
     et.hidden = false; et.textContent = "Envoi de la demande…";
     noter("koatt", true).then(function(res){
       if (res && (res.envoye || res.dejaEnvoye)) et.innerHTML = "<b>Le Dr Derkenne vient d'envoyer à " + qui + " la demande d'attestation de dépassement d'honoraires</b>, avec la facture acquittée. L'attestation vous sera adressée par " + qui + ".";
-      else { et.hidden = true; location.href = a.href; }   // en cas d'échec : mail depuis la messagerie du patient
+      else { et.hidden = true; location.href = a.href; secours("mail-att"); }   // en cas d'échec : mail depuis la messagerie du patient
       a.dataset.envoi = "";
     });
   });
