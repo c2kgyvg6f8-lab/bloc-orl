@@ -62,7 +62,7 @@ a.ch{text-decoration:none}
    <div class="col2" id="br" hidden>
     <button class="ch b" id="b-mut">Je souhaite un mail pré-rempli pour expliquer ma situation à ma mutuelle</button>
     <a class="ch r" id="mail-cab" href="#"></a>
-    <a class="ch o" id="mail-att" href="#">Je veux une attestation de dépassement d'honoraires</a>
+    <a class="ch o" id="mail-att" href="#">Je veux que l'hôpital Saint-Joseph m'envoie une attestation de dépassement d'honoraires</a>
    </div>
    <svg id="cx" aria-hidden="true"></svg>
   </div>
@@ -135,6 +135,7 @@ a.ch{text-decoration:none}
   $("mail-cab").href = mailto(g("c") || "medigibbes14@orange.fr", "Remboursement du dépassement d'honoraires – " + ref,
     "Madame, Monsieur,\n\nJe ne parviens pas à me faire rembourser par ma mutuelle le dépassement d'honoraires pour :\n" + list +
     "\n\nJ'ai déjà transmis à ma mutuelle la facture acquittée du Dr Derkenne et " + attLib + ".\n\nPouvez-vous m'indiquer la marche à suivre ?" + fin);
+  $("mail-att").textContent = "Je veux que " + (L === "BO" ? "la clinique Bonneveine" : "l'hôpital Saint-Joseph") + " m'envoie une attestation de dépassement d'honoraires";
   $("mail-att").href = mailto(g("a") || (L === "BO" ? "ambulatoire@clinique-de-bonneveine.fr" : "PEC@hopital-saint-joseph.fr"), "Demande d'attestation de dépassement d'honoraires – " + ref,
     "Madame, Monsieur,\n\nJe vous demande de bien vouloir me faire parvenir une attestation de dépassement d'honoraires pour :\n" + list + fin);
 
