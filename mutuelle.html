@@ -154,7 +154,8 @@ a.ch{text-decoration:none}
     "\n\nJ'ai déjà transmis à ma mutuelle la facture acquittée du Dr Derkenne et " + attLib + ".\n\nPouvez-vous m'indiquer la marche à suivre ?" + fin, "mail-cab");
   $("mail-att").textContent = "Je veux que " + (L === "BO" ? "la clinique Bonneveine" : "l'hôpital Saint-Joseph") + " m'envoie une attestation de dépassement d'honoraires";
   $("mail-att").href = mailto(g("a") || (L === "BO" ? "ambulatoire@clinique-de-bonneveine.fr" : "PEC@hopital-saint-joseph.fr"), "Demande d'attestation de dépassement d'honoraires – " + ref,
-    "Madame, Monsieur,\n\nJe vous demande de bien vouloir me faire parvenir une attestation de dépassement d'honoraires pour :\n" + list + fin, "mail-att");
+    "Madame, Monsieur,\n\nJe vous demande de bien vouloir me faire parvenir une attestation de dépassement d'honoraires pour :\n" +
+    details.map(function(x){ return "- " + x + (/^Dépassement d'honoraires réglé/.test(x) ? ", comme en atteste la facture acquittée jointe" : ""); }).join("\n") + "." + fin, "mail-att");
 
   /* ---------- Relais du Dr Derkenne (jeton seulement, aucune donnée personnelle dans l'adresse) ---------- */
   var T = g("t"), U = g("u"), relais = /^[A-Za-z0-9]{24,64}$/.test(T) && /^https:\/\/script\.google(usercontent)?\.com\//.test(U);
@@ -203,7 +204,7 @@ a.ch{text-decoration:none}
     });
   }
   function enregistrer(fi){ var url = URL.createObjectURL(fi.blob), a = document.createElement("a"); a.href = url; a.download = fi.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(url); }, 60000); }
-  var dls = document.querySelectorAll("button.dl[data-dl]"), ATTEST = false, ETAB = false;
+  var dls = document.querySelectorAll("button.dl[data-dl]"), ATTEST = false;
   for (var j = 0; j < dls.length; j++){
     var isAtt = dls[j].getAttribute("data-dl") === "att";
     dls[j].hidden = isAtt;
@@ -215,7 +216,6 @@ a.ch{text-decoration:none}
     };
   }
   if (relais) appel({ a: "mutinfo", t: T }, 20000).then(function(res){
-    if (res && res.ok && res.etab) ETAB = true;   // relais v6 : la demande d'attestation part de la boîte du Dr Derkenne
     if (res && res.ok && res.attest){ ATTEST = true; for (var k = 0; k < dls.length; k++) if (dls[k].getAttribute("data-dl") === "att") dls[k].hidden = false; majPJ(); }
   }, function(){});
 
@@ -286,16 +286,30 @@ a.ch{text-decoration:none}
   }
   $("mail-cab").addEventListener("click", function(){ noter("kocab"); secours("mail-cab"); });
   $("mailto-mut").addEventListener("click", function(){ secours("mailto-mut"); });
+  /* v327 : la demande d'attestation part de la messagerie du patient, facture acquittée jointe automatiquement
+     (téléphone / tablette / ordinateur compatible : partage avec pièce jointe ; sinon facture téléchargée + mail pré-rempli) */
+  function prepFact(){ if (relais && !FICH.fact) charger("fact").catch(function(){}); }
+  $("b-ko").addEventListener("click", prepFact);
+  if (g("r") === "ko") prepFact();
   $("mail-att").addEventListener("click", function(e){
-    if (!ETAB){ noter("koatt"); secours("mail-att"); return; }   // ancien lien : le mail s'ouvre dans la messagerie du patient
-    e.preventDefault(); var a = this; if (a.dataset.envoi) return; a.dataset.envoi = "1"; diag("");
-    var et = $("etab-etat"), qui = L === "BO" ? "la clinique Bonneveine" : "l'hôpital Saint-Joseph";
-    et.hidden = false; et.textContent = "Envoi de la demande…";
-    noter("koatt", true).then(function(res){
-      if (res && (res.envoye || res.dejaEnvoye)) et.innerHTML = "<b>Le Dr Derkenne vient d'envoyer à " + qui + " la demande d'attestation de dépassement d'honoraires</b>, avec la facture acquittée. L'attestation vous sera adressée par " + qui + ".";
-      else { et.hidden = true; location.href = a.href; secours("mail-att"); }   // en cas d'échec : mail depuis la messagerie du patient
-      a.dataset.envoi = "";
-    });
+    noter("koatt"); diag("");
+    var m = MAILS["mail-att"], et = $("etab-etat"), a = this, dest = "<b>" + m.to + "</b>";
+    var copier = ' <button type="button" class="dl" id="cp-dest" style="margin:4px 0 0">Copier l\'adresse</button>';
+    var bindCp = function(){ var b = $("cp-dest"); if (b) b.onclick = function(){ var t = this; (navigator.clipboard ? navigator.clipboard.writeText(m.to) : Promise.reject()).then(function(){ t.textContent = "Adresse copiée ✓"; }, function(){ t.textContent = m.to; }); }; };
+    var f = FICH.fact ? new File([FICH.fact.blob], FICH.fact.name, { type: "application/pdf" }) : null;
+    if (f && navigator.canShare && navigator.share && navigator.canShare({ files: [f] })){
+      e.preventDefault();
+      navigator.share({ title: m.subject, text: m.body, files: [f] }).then(function(){
+        et.hidden = false; et.innerHTML = "Dans votre application de mail (facture acquittée jointe) : <b>ajoutez le destinataire</b> " + dest + ", vérifiez l'objet (« " + m.subject.replace(/</g, "&lt;") + " »), puis envoyez." + copier; bindCp(); setTimeout(relier, 0);
+      }, function(err){ if (err && err.name === "AbortError") return; location.href = a.href; secours("mail-att"); });
+      return;
+    }
+    if (f){   // ordinateur sans partage : la facture est téléchargée, le mail s'ouvre pré-rempli
+      enregistrer(FICH.fact);
+      et.hidden = false; et.innerHTML = "<b>Votre facture acquittée vient d'être téléchargée</b> (dossier Téléchargements) : <b>joignez-la au mail</b> qui s'ouvre dans votre messagerie (destinataire " + dest + "), puis envoyez.";
+      setTimeout(relier, 0);
+    } else { et.hidden = false; et.innerHTML = "Joignez au mail qui s'ouvre la <b>facture acquittée</b> (pièce jointe du mail du Dr Derkenne), puis envoyez."; setTimeout(relier, 0); }
+    secours("mail-att");   // le lien mailto s'ouvre normalement (href)
   });
 
   /* Connecteurs entre « Ma mutuelle ne veut pas me rembourser » et les 3 choix */
